@@ -4,7 +4,10 @@
 #include <mcp_can.h>
 #include <pwm.h>
 
-// PWM関係
+void readSwitch();
+void motorDrive(int direction);
+
+// PWM 関係
 #define PWM_N 11
 #define PWM_L 10
 #define DIS 7
@@ -20,7 +23,7 @@
 #define CAN_CS 5
 #define SCL 19
 #define SDA 18
-// LED関係
+// LED 関係
 #define LED 13
 #define RGB 6
 // 入力関係
@@ -29,23 +32,23 @@
 #define SW2 1
 #define SW3 0
 
+// duty 比
+#define DUTY 25.0
+
 // R4では"pwm.h"を用いることでPWM周波数を任意の値に指定できる。analogWrite()の上位互換
 PwmOut pwm_n(PWM_N);
 PwmOut pwm_l(PWM_L);
 
-FastLED_NeoPixel<1, RGB, NEO_GRB> strip;  // RGBLED制御用
+FastLED_NeoPixel<1, RGB, NEO_GRB> strip;  // RGBLED 制御用
 
-MCP_CAN CAN(CAN_CS);  // MCP2515 CSピン指定
+MCP_CAN CAN(CAN_CS);  // MCP2515 CS ピン指定
 
-unsigned int CAN_ID;  // CANのID（DCモータドライバは0x100～0x102）
-
-float duty;     // duty比
-float maxDuty;  // duty比の最大値（大きすぎると危険なため）
+unsigned int CAN_ID;  // CANのID（DC モータドライバは 0x300 番台）
+int motorState = 0;   // モータの状態（正転: 1、逆転: -1、停止: 0）
 
 void setup() {
-  Serial.begin(115200);  // Serial初期化
+  Serial.begin(115200);
 
-  // pinMode宣言
   pinMode(PWM_N, OUTPUT);
   pinMode(PWM_L, OUTPUT);
   pinMode(DIS, OUTPUT);
@@ -68,8 +71,8 @@ void setup() {
   digitalWrite(PWM_N, LOW);
   digitalWrite(PWM_L, LOW);
   digitalWrite(DIS, LOW);
-  pwm_n.begin((uint32_t)30, (uint32_t)0);  // スイッチング周期30µs（≒33kHz）
-  pwm_l.begin((uint32_t)30, (uint32_t)0);  // スイッチング周期30µs（≒33kHz）
+  pwm_n.begin((uint32_t)30, (uint32_t)0);  // スイッチング周期 30 µs（≒ 33 kHz）
+  pwm_l.begin((uint32_t)30, (uint32_t)0);  // スイッチング周期 30 µs（≒ 33 kHz）
 
   if (CAN.begin(MCP_ANY, CAN_1000KBPS, MCP_16MHZ) != CAN_OK) {
     Serial.println("CAN.begin(...) failed.");
@@ -84,47 +87,35 @@ void setup() {
   }
   CAN.setMode(MCP_NORMAL);
 
-  readSwitch();  // DIPスイッチの読み出してCAN_IDを指定
+  readSwitch();  // DIP スイッチの読み出して CAN_ID を指定
 }
 
 void loop() {
-  // CAN受信
   if (CAN.checkReceive() == CAN_MSGAVAIL) {
     unsigned long rxId;
     unsigned char len;
     unsigned char buf[8];
-    CAN.readMsgBuf(&rxId, &len, buf);  // 受信したCANの読み出し
+    CAN.readMsgBuf(&rxId, &len, buf);  // 受信した CAN の読み出し
 
-    // IDが一致したらbufをcommandとvalueに分離
     if (rxId == CAN_ID) {
-      Serial.println("Received CAN!");
-
       unsigned char command = buf[0];
-      long value = ((long)buf[1] << 24) + ((long)buf[2] << 16) +
-                   ((long)buf[3] << 8) + buf[4];
 
-      // commadが0x00であれば、dutyにvalueをfloat型にキャストしてdutyに代入（CANでは小数が扱えないから）
-      if (command == 0x00) {
-        duty = (float)value;
+      if (command == 0x00) {  // 正転
+        motorState = 1;
+      } else if (command == 0x01) {  // 逆転
+        motorState = -1;
+      } else if (command == 0x02) {  // 停止
+        motorState = 0;
       }
     }
-    Serial.print("duty : ");
-    Serial.println(duty);
+    Serial.print("motorState : ");
+    Serial.println(motorState);
   }
 
-  // Serial受信
-  if (Serial.available()) {
-    Serial.println("Received Serial!");
-    duty = Serial.parseFloat();  // dutyにシリアルモニタで書き込んだ値を代入
+  motorDrive(motorState);
 
-    // Serialのバッファをリセットする（多分なくても動く）
-    while (Serial.available() > 0) {
-      char t = Serial.read();
-    }
-    Serial.print("duty : ");
-    Serial.println(duty);
-  }
-  motorDrive(duty);
+  Serial.print(digitalRead(SW_A));
+  Serial.println(digitalRead(SW_B));
 }
 
 // DIPスイッチを読み取ってCAN_IDを指定する
@@ -146,22 +137,20 @@ void readSwitch() {
       break;
   }
   strip.show();
-  CAN_ID = 0x100 + readNumber;
-  Serial.print("CAN_ID:");
+  CAN_ID = 0x300 + readNumber;
+  Serial.print("CAN_ID: ");
   Serial.println(CAN_ID);
 }
 
 // モータ駆動
-void motorDrive(float motorPower) {
-  if (motorPower > 0) {  // 正転
-    motorPower = constrain(motorPower, 0, maxDuty);
-    pwm_n.pulse_perc(motorPower);
+void motorDrive(int direction) {  // direction: 1 = 正転, -1 = 逆転, 0 = 停止
+  if (direction == 1) {           // 正転
+    pwm_n.pulse_perc(DUTY);
     pwm_l.pulse_perc(0);
-  } else if (motorPower < 0) {  // 逆転
-    motorPower = constrain(motorPower, -maxDuty, 0);
+  } else if (direction == -1) {  // 逆転
     pwm_n.pulse_perc(0);
-    pwm_l.pulse_perc(-motorPower);
-  } else if (motorPower == 0) {  // 停止
+    pwm_l.pulse_perc(DUTY);
+  } else if (direction == 0) {  // 停止
     pwm_l.pulse_perc(0);
     pwm_n.pulse_perc(0);
   }
