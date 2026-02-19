@@ -106,9 +106,23 @@ void loop() {
 
   if (motorState == 1 && digitalRead(SW_A) == LOW) {  // 上まで達したとき
     motorState = 0;
+
+    CanMsg msg;
+    msg.id = 0x000;
+    msg.data_length = 8;
+    msg.data[0] = 0x30;
+    msg.data[1] = 0x01;
+    CAN.write(msg);
   } else if (motorState == -1 &&
              digitalRead(SW_B) == LOW) {  // 下まで達したとき
     motorState = 0;
+
+    CanMsg msg;
+    msg.id = 0x000;
+    msg.data_length = 8;
+    msg.data[0] = 0x30;
+    msg.data[1] = 0x00;
+    CAN.write(msg);
   }
 
   motorDrive(motorState);
