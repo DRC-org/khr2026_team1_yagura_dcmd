@@ -95,23 +95,12 @@ void loop() {
     if (rxId == CAN_ID) {
       unsigned char command = msg.data[0];
 
-      if (command == 0x00) {  // 正転
-        if (CAN_ID == 0x300) {
-          motorState = -1;
-        } else {
-          motorState = 1;
-        }
-        Serial.println("Forward");
-      } else if (command == 0x01) {  // 逆転
-        if (CAN_ID == 0x300) {
-          motorState = 1;
-        } else {
-          motorState = -1;
-        }
-        Serial.println("Reverse");
+      if (command == 0x00) {  // 下げる
+        motorState = -1;
+      } else if (command == 0x01) {  // 上げる
+        motorState = 1;
       } else if (command == 0x02) {  // 停止
         motorState = 0;
-        Serial.println("Stop");
       }
     }
   }
@@ -166,12 +155,14 @@ void readSwitch() {
 
 // モータ駆動
 void motorDrive(int direction) {  // direction: 1 = 正転, -1 = 逆転, 0 = 停止
-  if (direction == 1) {           // 正転
-    pwm_n.pulse_perc(DUTY);
-    pwm_l.pulse_perc(0);
-  } else if (direction == -1) {  // 逆転
+  if ((direction == 1 && CAN_ID == 0x300) ||
+      (direction == -1 && CAN_ID == 0x301)) {  // 正転
     pwm_n.pulse_perc(0);
     pwm_l.pulse_perc(DUTY);
+  } else if ((direction == -1 && CAN_ID == 0x300) ||
+             (direction == 1 && CAN_ID == 0x301)) {  // 逆転
+    pwm_n.pulse_perc(DUTY);
+    pwm_l.pulse_perc(0);
   } else if (direction == 0) {  // 停止
     pwm_l.pulse_perc(0);
     pwm_n.pulse_perc(0);
