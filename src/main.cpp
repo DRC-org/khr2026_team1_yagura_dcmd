@@ -94,11 +94,20 @@ void loop() {
 
     if (rxId == CAN_ID) {
       unsigned char command = msg.data[0];
+
       if (command == 0x00) {  // 正転
-        motorState = -1;
+        if (CAN_ID == 0x300) {
+          motorState = -1;
+        } else {
+          motorState = 1;
+        }
         Serial.println("Forward");
       } else if (command == 0x01) {  // 逆転
-        motorState = 1;
+        if (CAN_ID == 0x300) {
+          motorState = 1;
+        } else {
+          motorState = -1;
+        }
         Serial.println("Reverse");
       } else if (command == 0x02) {  // 停止
         motorState = 0;
