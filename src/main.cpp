@@ -111,7 +111,11 @@ void loop() {
     CanMsg msg;
     msg.id = 0x000;
     msg.data_length = 8;
-    msg.data[0] = 0x30;
+    if (CAN_ID == 0x300) {
+      msg.data[0] = 0x30;
+    } else if (CAN_ID == 0x301) {
+      msg.data[0] = 0x31;
+    }
     msg.data[1] = 0x01;
     CAN.write(msg);
   } else if (motorState == -1 &&
@@ -121,7 +125,11 @@ void loop() {
     CanMsg msg;
     msg.id = 0x000;
     msg.data_length = 8;
-    msg.data[0] = 0x30;
+    if (CAN_ID == 0x300) {
+      msg.data[0] = 0x30;
+    } else if (CAN_ID == 0x301) {
+      msg.data[0] = 0x31;
+    }
     msg.data[1] = 0x00;
     CAN.write(msg);
   }
