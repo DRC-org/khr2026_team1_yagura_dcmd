@@ -101,6 +101,13 @@ void loop() {
         motorState = 1;
       } else if (command == 0x02) {  // 停止
         motorState = 0;
+      } else if (command == 0xFF) {  // ヘルスチェック応答
+        CanMsg reply;
+        reply.id = 0x000;
+        reply.data_length = 8;
+        reply.data[0] = (CAN_ID == 0x300) ? 0x3A : 0x3B;
+        reply.data[1] = motorState;
+        CAN.write(reply);
       }
     }
   }
